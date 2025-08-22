@@ -4,6 +4,7 @@
 #include<fstream>
 #include <iomanip>
 #include <vector>
+#include <cctype>
 using namespace std;
 
 void print_dos_header(IMAGE_DOS_HEADER* h){
@@ -30,7 +31,7 @@ void print_dos_header(IMAGE_DOS_HEADER* h){
     for(int i = 0; i<10; i++){
         cout << "Reserved : " << setw(4) << h->e_res2[i] << endl;
     }
-    cout << "Offset to New EXE Header : " << setw(4) << h->e_lfanew << endl;
+    cout << "Offset to New EXE Header : " << setw(8) << h->e_lfanew << endl;
 }
 
 void print_dos_stub(vector<char>& stubData){
@@ -50,7 +51,31 @@ void print_dos_stub(vector<char>& stubData){
     cout << endl;
 }
 
+void print_nt_header(IMAGE_NT_HEADERS32* h){
+    cout << hex << uppercase << setfill('0');
+    cout << "Signature : " << setw(8) << h->Signature << " ('PE\\0\\0')" << endl;
+    cout << "[File Header]" << endl;
+    cout << "Machine : " << setw(4) << h->FileHeader.Machine << endl;
+    cout << "NumberOfSections : " << setw(4) << h->FileHeader.NumberOfSections << endl;
+    cout << "Time Date Stamp : " << setw(8) << h->FileHeader.TimeDateStamp << endl;
+    cout << "Pointer to Symbol Table : " << setw(8) << h->FileHeader.PointerToSymbolTable << endl;
+    cout << "Size of Optional Header : " << setw(4) << h->FileHeader.SizeOfOptionalHeader << endl;
+    cout << "Characteristics : " << setw(4) << h->FileHeader.Characteristics << endl;
+    cout << "[Optional Header]" << endl;
+    cout << "Magic : " << setw(4) << h->OptionalHeader.Magic << " (PE32)" << endl;
+    cout << "Address Of Entry Point : " << setw(8) << h->OptionalHeader.AddressOfEntryPoint << endl;
+    cout << "Image Base : " << setw(8) << h->OptionalHeader.ImageBase << endl;
+    cout << "Section Alignment : " << setw(8) << h->OptionalHeader.SectionAlignment << endl;
+    cout << "File Alignment : " << setw(8) << h->OptionalHeader.FileAlignment << endl;
+    cout << "Size of Image : " << setw(8) << h->OptionalHeader.SizeOfImage << endl;
+    cout << "Size of Header : " << setw(8) << h->OptionalHeader.SizeOfHeaders << endl;
+    cout << "Subsystem : " << setw(4) << h->OptionalHeader.Subsystem << endl;
+    cout << "Number Of Data Directories : " << setw(8) << h->OptionalHeader.NumberOfRvaAndSizes << endl;
+
+}
+
 int main(){
+    // File Open
     string file_name;
     cout << "Input File Name : ";
     cin >> file_name;
@@ -60,6 +85,7 @@ int main(){
         cout << "File Open Error" << endl;
         return 1;
     }
+    // Read DOS Header
     IMAGE_DOS_HEADER dos_header;
     fin.read(reinterpret_cast<char*>(&dos_header), sizeof(IMAGE_DOS_HEADER));
     if (fin.fail()) {
@@ -72,20 +98,50 @@ int main(){
         fin.close();
         return 1;
     }
-    print_dos_header(&dos_header);
-    long Stub_size = dos_header.e_lfanew - sizeof(IMAGE_DOS_HEADER);
-    if(Stub_size <= 0){
-        cout << "Can ignore DOS Stub" << endl;
+    // Read NT Header
+    IMAGE_NT_HEADERS32 nt_header;
+    fin.seekg(dos_header.e_lfanew, ios::beg);
+    fin.read(reinterpret_cast<char*>(&nt_header), sizeof(IMAGE_NT_HEADERS32));
+    if(nt_header.Signature != IMAGE_NT_SIGNATURE){
+        cout << "Error : Invalid PE format" << endl;
+        fin.close();
+        return 1; 
     }
-    else{
-        vector<char> stubBuffer(Stub_size);
-        fin.seekg(sizeof(IMAGE_DOS_HEADER), ios::beg);
-        fin.read(stubBuffer.data(), Stub_size);
-        if (fin.fail()) {
-            cout << "Error : Can't read DOS Stub" << endl;
-        } else {
-            print_dos_stub(stubBuffer);
+    // Run Command
+    int command;
+    while(1){
+        cout << "select menu : ";
+        cin >> command;
+        switch(command){
+            case 1:
+                print_dos_header(&dos_header);
+                break;
+            case 2:{
+                long Stub_size = dos_header.e_lfanew - sizeof(IMAGE_DOS_HEADER);
+                if(Stub_size <= 0){
+                    cout << "Can ignore DOS Stub" << endl;
+                }
+                else{
+                    vector<char> stubBuffer(Stub_size);
+                    fin.seekg(sizeof(IMAGE_DOS_HEADER), ios::beg);
+                    fin.read(stubBuffer.data(), Stub_size);
+                    if (fin.fail()) {
+                        cout << "Error : Can't read DOS Stub" << endl;
+                    } else {
+                        print_dos_stub(stubBuffer);
+                    }
+                }
+                break;
+            }
+            case 3:
+                print_nt_header(&nt_header);
+                break;
+            case 0:
+                fin.close();
+                return 0;
+            default:
+                cout << "Invalid command" << endl;
+                break;
         }
     }
-    fin.close();
 }
