@@ -74,6 +74,25 @@ void print_nt_header(IMAGE_NT_HEADERS32* h){
 
 }
 
+void print_section_header(const IMAGE_SECTION_HEADER& h) {
+    cout << hex << uppercase << setfill('0');
+    cout << "Name : " << h.Name;
+    cout << "  (Hex : ";
+    for (int i = 0; i < 8; ++i) {
+        cout << setw(2) << static_cast<unsigned int>(static_cast<unsigned char>(h.Name[i])) << " ";
+    }
+    cout << ")" << endl;
+    cout << "Virtual Size : " << setw(8) << h.Misc.VirtualSize << endl;
+    cout << "Virtual Address (RVA) : " << setw(8) << h.VirtualAddress << endl;
+    cout << "Size of Raw Data : " << setw(8) << h.SizeOfRawData << endl;
+    cout << "Pointer to Raw Data : " << setw(8) << h.PointerToRawData << endl;
+    cout << "Pointer to Relocations : " << setw(8) << h.PointerToRelocations << endl;
+    cout << "Pointer to Line Numbers : " << setw(8) << h.PointerToLinenumbers << endl;
+    cout << "Number of Relocations : " << setw(8) << h.NumberOfRelocations << endl;
+    cout << "Number of Line Numbers : " << setw(8) << h.NumberOfLinenumbers << endl;
+    cout << "Characteristics : " << setw(8) << h.Characteristics << endl;
+}
+
 int main(){
     // File Open
     string file_name;
@@ -107,6 +126,17 @@ int main(){
         fin.close();
         return 1; 
     }
+    // Read Section Header
+    vector<IMAGE_SECTION_HEADER> section_headers;
+    fin.seekg(dos_header.e_lfanew + sizeof(IMAGE_NT_HEADERS32), ios::beg);
+    int NumberOfSections = nt_header.FileHeader.NumberOfSections;
+    section_headers.resize(NumberOfSections);
+    fin.read(reinterpret_cast<char*>(section_headers.data()), sizeof(IMAGE_SECTION_HEADER) * NumberOfSections);
+    if (fin.fail()) {
+        cout << "Error: Can't read Section Headers" << endl;
+        fin.close();
+        return 1;
+    }
     // Run Command
     int command;
     while(1){
@@ -136,6 +166,25 @@ int main(){
             case 3:
                 print_nt_header(&nt_header);
                 break;
+            case 4:{
+                if (section_headers.empty()){
+                    cout << "No sections found" << endl;
+                    break;
+                }
+                cout << "\n--- Section List ---" << endl;
+                for (size_t i = 0; i < section_headers.size(); ++i) {
+                    cout << i + 1 << ". " << section_headers[i].Name << endl;
+                }
+                int sel;
+                cout << "Select number : ";
+                cin >> sel;
+                if (sel > 0 && sel <= section_headers.size()) {
+                    print_section_header(section_headers[sel - 1]);
+                } else {
+                    cout << "Invalid section number" << endl;
+                }
+                break;
+            }
             case 0:
                 fin.close();
                 return 0;
