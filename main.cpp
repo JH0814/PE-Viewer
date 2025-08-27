@@ -7,6 +7,15 @@
 #include <cctype>
 using namespace std;
 
+DWORD RVAToRAW(DWORD rva, vector<IMAGE_SECTION_HEADER>& section_headers){
+    for (auto& section : section_headers) {
+        if (rva >= section.VirtualAddress && rva < section.VirtualAddress + section.Misc.VirtualSize) {
+            return (rva - section.VirtualAddress) + section.PointerToRawData;
+        }
+    }
+    return 0;
+}
+
 void print_dos_header(IMAGE_DOS_HEADER* h){
     cout << hex << uppercase << setfill('0');
     cout << "Signature : " << setw(4) << h->e_magic << endl;
@@ -93,6 +102,184 @@ void print_section_header(const IMAGE_SECTION_HEADER& h) {
     cout << "Characteristics : " << setw(8) << h.Characteristics << endl;
 }
 
+vector<IMAGE_IMPORT_DESCRIPTOR>parse_idt(ifstream& fin, IMAGE_NT_HEADERS32* nt_header, vector<IMAGE_SECTION_HEADER>& section_headers){
+    vector<IMAGE_IMPORT_DESCRIPTOR> arr;
+    IMAGE_DATA_DIRECTORY import_dir = nt_header->OptionalHeader.DataDirectory[1];
+    if(import_dir.VirtualAddress == 0){
+        cout << "Import Table not found" << endl;
+        return arr;
+    }
+    DWORD import_table_raw = RVAToRAW(import_dir.VirtualAddress, section_headers);
+    if(import_table_raw == 0){
+        cout << "Error: Can't convert RVA to RAW for Import Table" << endl;
+        return arr;
+    }
+    IMAGE_IMPORT_DESCRIPTOR iid;
+    DWORD cur = import_table_raw;
+    while(true){
+        fin.seekg(cur, ios::beg);
+        fin.read(reinterpret_cast<char*>(&iid), sizeof(iid));
+        if(iid.Name == 0 && iid.OriginalFirstThunk == 0){
+            break;
+        }
+        arr.push_back(iid);
+        cur += sizeof(iid);
+    }
+    return arr;
+}
+
+void print_idt(ifstream& fin, vector<IMAGE_IMPORT_DESCRIPTOR>& idt, vector<IMAGE_SECTION_HEADER>& section_headers){
+    if (idt.empty()) {
+        cout << "Fail or No IDT" << endl;
+        return;
+    }
+    int count = 0;
+    for (const auto& iid : idt){
+        cout << "[Descriptor " << count++ << "]" << endl;
+        cout << hex << uppercase << setfill('0');
+        cout << "OriginalFirstThunk : " << setw(8) << iid.OriginalFirstThunk << endl;
+        cout << "TimeDateStamp : " << setw(8) << iid.TimeDateStamp << endl;
+        cout << "ForwarderChain : " << setw(8) << iid.ForwarderChain << endl;
+        cout << "Name (RVA) : " << setw(8) << iid.Name;
+        DWORD dll_name_raw = RVAToRAW(iid.Name, section_headers);
+        if (dll_name_raw != 0) {
+            string dll_name;
+            fin.clear();
+            fin.seekg(dll_name_raw, ios::beg);
+            getline(fin, dll_name, '\0');
+            cout << " | DLL : " << dll_name << endl;
+        }
+        cout << "FirstThunk : " << setw(8) << iid.FirstThunk << endl;
+    }
+}
+
+typedef struct DLLThunks {
+    string dll_name;
+    DWORD int_rva;
+    DWORD iat_rva;
+    vector<IMAGE_THUNK_DATA32> int_thunks;
+    vector<IMAGE_THUNK_DATA32> iat_thunks;
+}DLLThunks;
+
+vector<DLLThunks>parse_iat_int(ifstream& fin, vector<IMAGE_IMPORT_DESCRIPTOR>& idt, vector<IMAGE_SECTION_HEADER>& section_headers){
+    vector<DLLThunks> arr;
+    if (idt.empty()) return arr;
+    for(auto& iid : idt){
+        fin.clear();
+        DLLThunks current_dll;
+        DWORD dll_name_raw = RVAToRAW(iid.Name, section_headers);
+        if (dll_name_raw != 0){
+            fin.seekg(dll_name_raw, ios::beg);
+            getline(fin, current_dll.dll_name, '\0');
+        }
+        current_dll.int_rva = iid.OriginalFirstThunk;
+        current_dll.iat_rva = iid.FirstThunk;
+        DWORD int_raw = RVAToRAW(iid.OriginalFirstThunk, section_headers);
+        if (int_raw != 0){
+            IMAGE_THUNK_DATA32 thunk;
+            DWORD current_pos = int_raw;
+            while (true){
+                fin.seekg(current_pos, ios::beg);
+                fin.read(reinterpret_cast<char*>(&thunk), sizeof(thunk));
+                if (thunk.u1.AddressOfData == 0) break;
+                current_dll.int_thunks.push_back(thunk);
+                current_pos += sizeof(thunk);
+            }
+        }
+        DWORD iat_raw = RVAToRAW(iid.FirstThunk, section_headers);
+        if (iat_raw != 0){
+            IMAGE_THUNK_DATA32 thunk;
+            DWORD current_pos = iat_raw;
+            while (true){
+                fin.seekg(current_pos, ios::beg);
+                fin.read(reinterpret_cast<char*>(&thunk), sizeof(thunk));
+                 if (thunk.u1.AddressOfData == 0) break;
+                current_dll.iat_thunks.push_back(thunk);
+                current_pos += sizeof(thunk);
+            }
+        }
+        arr.push_back(current_dll);
+    }
+    return arr;
+}
+
+void print_int(ifstream& fin, vector<DLLThunks>& thunk_data, vector<IMAGE_SECTION_HEADER>& section_headers, DWORD image_base){
+    if(thunk_data.empty()){
+        cout << "Error : There is no data" << endl;
+        return;
+    }
+    for(auto& dll_info : thunk_data){
+        cout << "\nDLL: " << dll_info.dll_name << endl;
+        cout << left;
+        cout << setw(12) << "VA" << setw(12) << "Data" << setw(8) << "Hint" << "Function Name" << endl;
+        cout << "-----------------------------------------------------------------" << endl;
+        for(size_t i = 0; i < dll_info.int_thunks.size(); ++i){
+            const auto& thunk = dll_info.int_thunks[i];
+            DWORD current_rva = dll_info.int_rva + (i * sizeof(IMAGE_THUNK_DATA32));
+            DWORD current_va = image_base + current_rva;
+            cout << hex << uppercase << left;
+            cout << setw(12) << current_va;
+            cout << setw(12) << thunk.u1.AddressOfData;
+            if(IMAGE_SNAP_BY_ORDINAL32(thunk.u1.Ordinal)){
+                cout << setw(8) << "N/A" << "Ordinal: " << dec << (thunk.u1.Ordinal & 0xFFFF) << endl;
+            } 
+            else{
+                DWORD name_rva = thunk.u1.AddressOfData;
+                DWORD name_raw = RVAToRAW(name_rva, section_headers);
+                if(name_raw != 0){
+                    WORD hint;
+                    string func_name;
+                    fin.clear();
+                    fin.seekg(name_raw, ios::beg);
+                    fin.read(reinterpret_cast<char*>(&hint), sizeof(hint));
+                    getline(fin, func_name, '\0');
+                    cout << hex << setw(8) << hint << func_name << endl;
+                }
+            }
+        }
+        cout << left << setw(12) << "0" << setw(12) << "0" << "End of Imports" << endl;
+    }
+}
+void print_iat(ifstream& fin, vector<DLLThunks>& thunk_data, vector<IMAGE_SECTION_HEADER>& section_headers, DWORD image_base){
+    if(thunk_data.empty()){
+        cout << "Error : There is no data" << endl;
+        return;
+    }
+    for(auto& dll_info : thunk_data){
+        cout << "\nDLL: " << dll_info.dll_name << endl;
+        cout << left;
+        cout << setw(12) << "VA" << setw(12) << "Data" << "Description" << endl;
+        cout << "-----------------------------------------------------------------" << endl;
+
+        for(size_t i = 0; i < dll_info.iat_thunks.size(); ++i){
+            const auto& iat_thunk = dll_info.iat_thunks[i];
+            const auto& int_thunk_for_name = dll_info.int_thunks[i];
+            DWORD current_rva = dll_info.iat_rva + (i * sizeof(IMAGE_THUNK_DATA32));
+            DWORD current_va = image_base + current_rva; // VA 계산
+            
+            cout << hex << uppercase << left;
+            cout << setw(12) << current_va;
+            cout << setw(12) << iat_thunk.u1.AddressOfData;
+
+            if(IMAGE_SNAP_BY_ORDINAL32(int_thunk_for_name.u1.Ordinal)){
+                cout << "Ordinal: " << dec << (int_thunk_for_name.u1.Ordinal & 0xFFFF) << endl;
+            } 
+            else{
+                DWORD name_rva = int_thunk_for_name.u1.AddressOfData;
+                DWORD name_raw = RVAToRAW(name_rva, section_headers);
+                if(name_raw != 0){
+                    string func_name;
+                    fin.clear();
+                    fin.seekg(name_raw + sizeof(WORD), ios::beg);
+                    getline(fin, func_name, '\0');
+                    cout << func_name << endl;
+                }
+            }
+        }
+        cout << left << setw(12) << "0" << setw(12) << "0" << "End of Imports" << endl;
+    }
+}
+
 int main(){
     // File Open
     string file_name;
@@ -137,6 +324,9 @@ int main(){
         fin.close();
         return 1;
     }
+    // IAT
+    vector<IMAGE_IMPORT_DESCRIPTOR> idt = parse_idt(fin, &nt_header, section_headers);
+    vector<DLLThunks> thunk_data = parse_iat_int(fin, idt, section_headers);
     // Run Command
     int command;
     while(1){
@@ -185,6 +375,15 @@ int main(){
                 }
                 break;
             }
+            case 5:
+                print_idt(fin, idt, section_headers);
+                break;
+            case 6:
+                print_int(fin, thunk_data, section_headers, nt_header.OptionalHeader.ImageBase);
+                break;
+            case 7:
+                print_iat(fin, thunk_data, section_headers, nt_header.OptionalHeader.ImageBase);
+                break;
             case 0:
                 fin.close();
                 return 0;
