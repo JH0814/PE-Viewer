@@ -7,6 +7,36 @@
 #include <cctype>
 using namespace std;
 
+void logo_start(){
+    cout << "+------------------------------------------------------+" << endl;
+    cout << "|                                                      |" << endl;
+    cout << "|                                                      |" << endl;
+    cout << "|                                                      |" << endl;
+    cout << "|                      PE Viewer                       |" << endl;
+    cout << "|                                                      |" << endl;
+    cout << "|                                                      |" << endl;
+    cout << "|                                                      |" << endl;
+    cout << "+------------------------------------------------------+" << endl;
+}
+
+void print_menu(){
+    cout << "+------------------------------------+" << endl;
+    cout << "|            PE Viewer Menu          |" << endl;
+    cout << "+------------------------------------+" << endl;
+    cout << "| 1. DOS Header                      |" << endl;
+    cout << "| 2. DOS Stub                        |" << endl;
+    cout << "| 3. NT Headers                      |" << endl;
+    cout << "| 4. Section Headers                 |" << endl;
+    cout << "+------------------------------------+" << endl;
+    cout << "| 5. IDT                             |" << endl;
+    cout << "| 6. INT                             |" << endl;
+    cout << "| 7. IAT                             |" << endl;
+    cout << "| 8. EAT Header                      |" << endl;
+    cout << "+------------------------------------+" << endl;
+    cout << "| 0. Exit                            |" << endl;
+    cout << "+------------------------------------+" << endl;
+}
+
 DWORD RVAToRAW(DWORD rva, vector<IMAGE_SECTION_HEADER>& section_headers){
     for (auto& section : section_headers) {
         if (rva >= section.VirtualAddress && rva < section.VirtualAddress + section.Misc.VirtualSize) {
@@ -17,6 +47,7 @@ DWORD RVAToRAW(DWORD rva, vector<IMAGE_SECTION_HEADER>& section_headers){
 }
 
 void print_dos_header(IMAGE_DOS_HEADER* h){
+    cout << "---------- DOS HEADER ----------" << endl;
     cout << hex << uppercase << setfill('0');
     cout << "Signature : " << setw(4) << h->e_magic << endl;
     cout << "Bytes on Last Page of File : " << setw(4) << h->e_cblp << endl;
@@ -41,9 +72,11 @@ void print_dos_header(IMAGE_DOS_HEADER* h){
         cout << "Reserved : " << setw(4) << h->e_res2[i] << endl;
     }
     cout << "Offset to New EXE Header : " << setw(8) << h->e_lfanew << endl;
+    cout << "------------------------------------" << endl;
 }
 
 void print_dos_stub(vector<char>& stubData){
+    cout << "---------- DOS Stub ----------" << endl;
     cout << hex << uppercase << setfill('0');
     for (size_t i = 0; i < stubData.size(); ++i) {
         if (i % 16 == 0) {
@@ -58,9 +91,11 @@ void print_dos_stub(vector<char>& stubData){
         cout << setw(2) << static_cast<unsigned int>(static_cast<unsigned char>(stubData[i])) << " ";
     }
     cout << endl;
+    cout << "------------------------------------" << endl;
 }
 
 void print_nt_header(IMAGE_NT_HEADERS32* h){
+    cout << "---------- NT Header ----------" << endl;
     cout << hex << uppercase << setfill('0');
     cout << "Signature : " << setw(8) << h->Signature << " ('PE\\0\\0')" << endl;
     cout << "[File Header]" << endl;
@@ -80,10 +115,12 @@ void print_nt_header(IMAGE_NT_HEADERS32* h){
     cout << "Size of Header : " << setw(8) << h->OptionalHeader.SizeOfHeaders << endl;
     cout << "Subsystem : " << setw(4) << h->OptionalHeader.Subsystem << endl;
     cout << "Number Of Data Directories : " << setw(8) << h->OptionalHeader.NumberOfRvaAndSizes << endl;
+    cout << "------------------------------------" << endl;
 
 }
 
 void print_section_header(const IMAGE_SECTION_HEADER& h) {
+    cout << "---------- Section Header ----------" << endl;
     cout << hex << uppercase << setfill('0');
     cout << "Name : " << h.Name;
     cout << "  (Hex : ";
@@ -100,6 +137,7 @@ void print_section_header(const IMAGE_SECTION_HEADER& h) {
     cout << "Number of Relocations : " << setw(8) << h.NumberOfRelocations << endl;
     cout << "Number of Line Numbers : " << setw(8) << h.NumberOfLinenumbers << endl;
     cout << "Characteristics : " << setw(8) << h.Characteristics << endl;
+    cout << "------------------------------------" << endl;
 }
 
 vector<IMAGE_IMPORT_DESCRIPTOR>parse_idt(ifstream& fin, IMAGE_NT_HEADERS32* nt_header, vector<IMAGE_SECTION_HEADER>& section_headers){
@@ -133,6 +171,7 @@ void print_idt(ifstream& fin, vector<IMAGE_IMPORT_DESCRIPTOR>& idt, vector<IMAGE
         cout << "Fail or No IDT" << endl;
         return;
     }
+    cout << "---------- IDT ----------" << endl;
     int count = 0;
     for (const auto& iid : idt){
         cout << "[Descriptor " << count++ << "]" << endl;
@@ -151,6 +190,7 @@ void print_idt(ifstream& fin, vector<IMAGE_IMPORT_DESCRIPTOR>& idt, vector<IMAGE
         }
         cout << "FirstThunk : " << setw(8) << iid.FirstThunk << endl;
     }
+    cout << "------------------------------------" << endl;
 }
 
 typedef struct DLLThunks {
@@ -208,6 +248,7 @@ void print_int(ifstream& fin, vector<DLLThunks>& thunk_data, vector<IMAGE_SECTIO
         cout << "Error : There is no data" << endl;
         return;
     }
+    cout << "---------- INT ----------" << endl;
     for(auto& dll_info : thunk_data){
         cout << "\nDLL: " << dll_info.dll_name << endl;
         cout << left;
@@ -239,12 +280,14 @@ void print_int(ifstream& fin, vector<DLLThunks>& thunk_data, vector<IMAGE_SECTIO
         }
         cout << left << setw(12) << "0" << setw(12) << "0" << "End of Imports" << endl;
     }
+    cout << "------------------------------------" << endl;
 }
 void print_iat(ifstream& fin, vector<DLLThunks>& thunk_data, vector<IMAGE_SECTION_HEADER>& section_headers, DWORD image_base){
     if(thunk_data.empty()){
         cout << "Error : There is no data" << endl;
         return;
     }
+    cout << "---------- IAT ----------" << endl;
     for(auto& dll_info : thunk_data){
         cout << "\nDLL: " << dll_info.dll_name << endl;
         cout << left;
@@ -278,18 +321,48 @@ void print_iat(ifstream& fin, vector<DLLThunks>& thunk_data, vector<IMAGE_SECTIO
         }
         cout << left << setw(12) << "0" << setw(12) << "0" << "End of Imports" << endl;
     }
+    cout << "------------------------------------" << endl;
+}
+
+void print_eat_header(const IMAGE_EXPORT_DIRECTORY& eat_header, const string& dll_name){
+    if (dll_name.empty()) {
+        cout << "Parsing Error or No Table" << endl;
+        return;
+    }
+    cout << hex << uppercase;
+    cout << "---------- EAT Header ----------" << endl;
+    cout << "DLL Name : " << dll_name << endl;
+    cout << "Characteristics : " << eat_header.Characteristics << endl;
+    cout << "TimeDateStamp : " << eat_header.TimeDateStamp << endl;
+    cout << "Major/Minor Version : " << eat_header.MajorVersion << "/" << eat_header.MinorVersion << endl;
+    cout << "Base : " << eat_header.Base << endl;
+    cout << "NumberOfFunctions : " << eat_header.NumberOfFunctions << endl;
+    cout << "NumberOfNames : " << eat_header.NumberOfNames << endl;
+    cout << "AddressOfFunctions (RVA) : " << eat_header.AddressOfFunctions << endl;
+    cout << "AddressOfNames (RVA) : " << eat_header.AddressOfNames << endl;
+    cout << "AddressOfNameOrdinals (RVA) : " << eat_header.AddressOfNameOrdinals << endl;
+    cout << "------------------------------------" << endl;
 }
 
 int main(){
+    logo_start();
     // File Open
     string file_name;
-    cout << "Input File Name : ";
-    cin >> file_name;
     ifstream fin;
-    fin.open(file_name, ios::binary);
-    if(!fin){
-        cout << "File Open Error" << endl;
-        return 1;
+    while(1){
+        cout << "Input File Name(-1 to exit) : ";
+        cin >> file_name;
+        if(file_name == "-1"){
+            return 0;
+        }
+        fin.open(file_name, ios::binary);
+        if(!fin){
+            cout << "File Open Error : Please write once more" << endl;
+            fin.clear();
+        }
+        else{
+            break;
+        }
     }
     // Read DOS Header
     IMAGE_DOS_HEADER dos_header;
@@ -327,9 +400,25 @@ int main(){
     // IAT
     vector<IMAGE_IMPORT_DESCRIPTOR> idt = parse_idt(fin, &nt_header, section_headers);
     vector<DLLThunks> thunk_data = parse_iat_int(fin, idt, section_headers);
+    // EAT
+    IMAGE_EXPORT_DIRECTORY eat_header;
+    string eat_dll_name;
+    IMAGE_DATA_DIRECTORY export_dir_entry = nt_header.OptionalHeader.DataDirectory[0];
+    if(export_dir_entry.VirtualAddress != 0){
+        DWORD eat_raw = RVAToRAW(export_dir_entry.VirtualAddress, section_headers);
+        if (eat_raw != 0){
+            fin.clear();
+            fin.seekg(eat_raw, ios::beg);
+            fin.read(reinterpret_cast<char*>(&eat_header), sizeof(IMAGE_EXPORT_DIRECTORY));
+            DWORD dll_name_raw = RVAToRAW(eat_header.Name, section_headers);
+            fin.seekg(dll_name_raw, ios::beg);
+            getline(fin, eat_dll_name, '\0');
+        }
+    }
     // Run Command
     int command;
     while(1){
+        print_menu();
         cout << "select menu : ";
         cin >> command;
         switch(command){
@@ -361,7 +450,7 @@ int main(){
                     cout << "No sections found" << endl;
                     break;
                 }
-                cout << "\n--- Section List ---" << endl;
+                cout << "--- Section List ---" << endl;
                 for (size_t i = 0; i < section_headers.size(); ++i) {
                     cout << i + 1 << ". " << section_headers[i].Name << endl;
                 }
@@ -384,8 +473,12 @@ int main(){
             case 7:
                 print_iat(fin, thunk_data, section_headers, nt_header.OptionalHeader.ImageBase);
                 break;
+            case 8:
+                print_eat_header(eat_header, eat_dll_name);
+                break;
             case 0:
                 fin.close();
+                cout << "Program Exit" << endl;
                 return 0;
             default:
                 cout << "Invalid command" << endl;
