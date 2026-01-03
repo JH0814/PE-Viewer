@@ -1,4 +1,8 @@
 #include<windows.h>
+#include<commdlg.h>
+#include<string>
+#include<vector>
+using namespace std;
 #define ID_FILE_OPEN    1001
 #define ID_FILE_EXIT    1002
 #define ID_VIEW_DOS     2001
@@ -8,6 +12,34 @@
 #define ID_VIEW_EAT     2005
 
 HWND hEdit;
+string cur_Filepath = "";
+
+bool OpenPE(HWND hwnd){
+    OPENFILENAMEA ofn;
+    char szFile[260] = {0};
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = hwnd;
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = sizeof(szFile);
+    ofn.lpstrFilter = "PE Files (EXE, DLL)\0*.exe;*.dll\0All Files\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.nMaxFileTitle = 0;
+    ofn.lpstrInitialDir = NULL;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+    if(GetOpenFileNameA(&ofn) == TRUE){
+        cur_Filepath = ofn.lpstrFile;
+
+        string title = "PE Viewer(GUI Ver) - " + cur_Filepath;
+        SetWindowTextA(hwnd, title.c_str());
+
+        string msg = "File loaded\r\nPath : " + cur_Filepath + "\r\n\r\nClick [View] if you want to watch info";
+        SetWindowTextA(hEdit, msg.c_str());
+        return true;
+    }
+    return false;
+}
 
 // 윈도우 메시지 처리 함수 (이벤트 처리기)
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -24,25 +56,50 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case ID_FILE_OPEN:
-            SetWindowTextA(hEdit, "File -> Open 메뉴가 클릭되었습니다.\r\n파일 선택창이 뜰 예정입니다.");
+            OpenPE(hwnd);
             break;
         case ID_VIEW_DOS:
-            SetWindowTextA(hEdit, "View -> DOS Header 메뉴가 클릭되었습니다.\r\n여기에 DOS 헤더 정보가 출력됩니다.");
+            if(cur_Filepath.empty()){
+                MessageBoxA(hwnd, "Open File first", "alert", MB_OK | MB_ICONINFORMATION);
+            }
+            else{
+                SetWindowTextA(hEdit, "View -> DOS Header 메뉴가 클릭되었습니다.\r\n여기에 DOS 헤더 정보가 출력됩니다.");
+            }
             break;
         case ID_VIEW_NT:
-            SetWindowTextA(hEdit, "View -> NT Header 메뉴가 클릭되었습니다.");
+            if(cur_Filepath.empty()){
+                MessageBoxA(hwnd, "Open File first", "alert", MB_OK | MB_ICONINFORMATION);
+            }
+            else{
+                SetWindowTextA(hEdit, "View -> NT Header 메뉴가 클릭되었습니다.");
+            }
             break;
         case ID_FILE_EXIT:
             PostQuitMessage(0);
             break;
         case ID_VIEW_SECTION:
-            SetWindowTextA(hEdit, "View -> Section Headers 메뉴가 클릭되었습니다.\r\n섹션 정보가 여기에 출력됩니다.");
+            if(cur_Filepath.empty()){
+                MessageBoxA(hwnd, "Open File first", "alert", MB_OK | MB_ICONINFORMATION);
+            }
+            else{
+                SetWindowTextA(hEdit, "View -> Section Headers 메뉴가 클릭되었습니다.\r\n섹션 정보가 여기에 출력됩니다.");
+            }
             break;
         case ID_VIEW_IAT:
-            SetWindowTextA(hEdit, "View -> Import Table (IAT) 메뉴가 클릭되었습니다.");
+            if(cur_Filepath.empty()){
+                MessageBoxA(hwnd, "Open File first", "alert", MB_OK | MB_ICONINFORMATION);
+            }
+            else{
+                SetWindowTextA(hEdit, "View -> Import Table (IAT) 메뉴가 클릭되었습니다.");
+            }
             break;
         case ID_VIEW_EAT:
-            SetWindowTextA(hEdit, "View -> Export Table (EAT) 메뉴가 클릭되었습니다.");
+            if(cur_Filepath.empty()){
+                MessageBoxA(hwnd, "Open File first", "alert", MB_OK | MB_ICONINFORMATION);
+            }
+            else{
+                SetWindowTextA(hEdit, "View -> Export Table (EAT) 메뉴가 클릭되었습니다.");
+            }
             break;
         }
         break;
