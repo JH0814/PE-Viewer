@@ -1,6 +1,9 @@
 # PE Viewer
 PE Viewer 만들기 프로젝트
-32 bit 프로그램을 대상으로 한 CLI PE Viewer를 구현합니다.
+32 bit 프로그램을 대상으로 한 CLI PE Viewer
+32 bit 프로그램을 대상으로 한 GUI PE Viewer
+
+를 구현합니다.
 
 컴파일 방법
 1. g++ 컴파일러 설치
